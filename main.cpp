@@ -2,8 +2,13 @@
 #include <windows.h>
 #include <winuser.h>
 #include <wingdi.h>
+#include <fstream>
+#include <string>
+#include <codecvt>
+#include <locale>
 
-void ctrl_v() {
+void ctrl_v()
+{
     INPUT ip;
     ip.type = INPUT_KEYBOARD;
 
@@ -28,7 +33,8 @@ void ctrl_v() {
     SendInput(1, &ip, sizeof(INPUT));
 }
 
-void alt_s() {
+void alt_s()
+{
     INPUT ip;
     ip.type = INPUT_KEYBOARD;
 
@@ -53,7 +59,8 @@ void alt_s() {
     SendInput(1, &ip, sizeof(INPUT));
 }
 
-void click(int x, int y) {
+void click(int x, int y)
+{
     SetCursorPos(x, y);
     INPUT Inputs[2] = {0};
     Inputs[0].type = INPUT_MOUSE;
@@ -63,69 +70,84 @@ void click(int x, int y) {
     SendInput(2, Inputs, sizeof(INPUT));
 }
 
-bool find_window(LPCSTR name) {
+bool find_window(LPCSTR name)
+{
     HWND w = FindWindowA(nullptr, name);
-    if (w == nullptr) {
+    if (w == nullptr)
+    {
         return false;
     }
     SetWindowPos(w, HWND_TOPMOST, 0, 0, 300, 500, SWP_SHOWWINDOW);
     SetForegroundWindow(w);
-    Sleep(250);
     return true;
 }
 
-void set_clipboard_text(const char *text, size_t length) {
-    OpenClipboard(nullptr);
-    if (!EmptyClipboard()) {
-        std::cout << "Cannot empty clipboard!";
+void paste_contents_from_file(const char *fileName)
+{
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
+    std::string text;
+
+    // Open the file and read its contents
+    std::ifstream file(fileName);
+    if (file.is_open())
+    {
+        std::string line;
+        while (getline(file, line))
+        {
+            text += line + "\n";
+        }
+        file.close();
     }
 
-    HGLOBAL global = GlobalAlloc(GMEM_FIXED, (length + 1) * sizeof(char));
-    if (!global) {
-        std::cout << "Cannot allocate memory for copying text";
-    }
+    // Convert the contents to UTF-16
+    std::wstring wtext = convert.from_bytes(text);
 
-#ifdef _MSC_VER
-    strcpy_s((char *)global, (length + 1) * sizeof(char), text);
-#else
-    strncpy((char *) global, text, length + 1);
-#endif
-
-    SetClipboardData(CF_TEXT, global);
+    // Copy the contents to the clipboard
+    HGLOBAL hText = GlobalAlloc(GMEM_MOVEABLE, (wtext.size() + 1) * sizeof(wchar_t));
+    memcpy(GlobalLock(hText), wtext.c_str(), (wtext.size() + 1) * sizeof(wchar_t));
+    GlobalUnlock(hText);
+    OpenClipboard(0);
+    EmptyClipboard();
+    SetClipboardData(CF_UNICODETEXT, hText);
     CloseClipboard();
     ctrl_v();
 }
 
-bool is_wechat() {
+bool is_wechat()
+{
     click(25, 110);
     return GetPixel(GetDC(GetActiveWindow()), 25, 110) == 6340871;
 }
 
-int send_wechat(const char* wechat, const char* text) {
-    if (find_window("WeChat")) {
-        Sleep(200);
-    } else {
+int send_wechat(const char *wechat, const char *text)
+{
+    if (find_window("WeChat"))
+    {
+        Sleep(300);
+    }
+    else
+    {
         std::cout << "Can't find wechat";
         return 1;
     }
-    if (!is_wechat()) {
+    if (!is_wechat())
+    {
         std::cout << "This is not wechat";
         return 2;
     }
     click(143, 39);
-    set_clipboard_text(wechat, strlen(wechat));
-    Sleep(600);
+    paste_contents_from_file(wechat);
+    Sleep(1000);
     click(155, 120);
-    set_clipboard_text(text, strlen(text));
+    paste_contents_from_file(text);
     alt_s();
     return 0;
 }
 
-
-int main() {
-    const char* wechat = "傳輸";
-    const char* text = "中文";
-    std::cout << wechat << text;
+int main()
+{
+    const char *wechat = "wechat.txt";
+    const char *text = "text.txt";
     send_wechat(wechat, text);
     return 0;
 }
